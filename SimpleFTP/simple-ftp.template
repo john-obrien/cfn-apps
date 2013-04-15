@@ -1,0 +1,237 @@
+{
+	"AWSTemplateFormatVersion": "2010-09-09",
+	
+	"Description" : "Simple FTP (VSFTPD) Server",
+	
+	"Parameters" : {
+		"KeyName" : {
+			"Description" : "Name of an existing EC2 KeyPair to enable SSH access to the instances",
+			"Type" : "String",
+			"MinLength": "1",
+			"MaxLength": "64",
+   			"Default" : "ec2-keypair",
+			"AllowedPattern" : "[-_ a-zA-Z0-9]*",
+			"ConstraintDescription" : "can contain only alphanumeric characters, spaces, dashes and underscores."
+		},
+  		
+		"FTPUsername": {
+			"Description" : "Username FTP access",
+			"Type": "String",
+			"MinLength": "1",
+			"MaxLength": "16",
+			"AllowedPattern" : "[a-zA-Z][a-zA-Z0-9]*",
+			"ConstraintDescription" : "must begin with a letter and contain only alphanumeric characters."
+		},
+		
+		"FTPPassword": {
+			"NoEcho": "true",
+			"Description" : "Password for FTP access",
+			"Type": "String",
+			"MinLength": "6",
+			"MaxLength": "41",
+			"AllowedPattern" : "[a-zA-Z0-9]*",
+			"ConstraintDescription" : "must contain only alphanumeric characters."
+		},
+		
+		"InstanceType" : {
+			"Description" : "FTP Server EC2 instance type",
+			"Type" : "String",
+			"Default" : "t1.micro",
+			"AllowedValues" : [ "t1.micro","m1.small","m1.medium","m1.large","m1.xlarge","m2.xlarge","m2.2xlarge","m2.4xlarge","m3.xlarge","m3.2xlarge","c1.medium","c1.xlarge","cc1.4xlarge","cc2.8xlarge","cg1.4xlarge"],
+			"ConstraintDescription" : "must be a valid EC2 instance type."
+		}
+	},
+	
+	"Mappings" : {
+		"AWSInstanceType2Arch" : {
+			"t1.micro"    : { "Arch" : "EBS64" },
+			"m1.small"    : { "Arch" : "I64" },
+			"m1.medium"   : { "Arch" : "I64" },
+			"m1.large"    : { "Arch" : "I64" },
+			"m1.xlarge"   : { "Arch" : "I64" },
+			"m2.xlarge"   : { "Arch" : "I64" },
+			"m2.2xlarge"  : { "Arch" : "I64" },
+			"m2.4xlarge"  : { "Arch" : "I64" },
+			"m3.xlarge"   : { "Arch" : "EBS64" },
+			"m3.2xlarge"  : { "Arch" : "EBS64" },
+			"c1.medium"   : { "Arch" : "I64" },
+			"c1.xlarge"   : { "Arch" : "I64" }
+		},
+		
+		"AWSRegionArch2AMI" : {
+			"us-east-1"      : { "EBS32": "ami-7ecf5c17", "EBS64": "ami-54cf5c3d", "I32": "ami-2ccf5c45", "I64": "ami-04cf5c6d" },
+			"us-west-2"      : { "EBS32": "ami-6227ad52", "EBS64": "ami-8e27adbe", "I32": "ami-0427ad34", "I64": "ami-7627ad46" },
+			"us-west-1"      : { "EBS32": "ami-a63210e3", "EBS64": "ami-b63210f3", "I32": "ami-963210d3", "I64": "ami-a83210ed" },
+			"eu-west-1"      : { "EBS32": "ami-5c5f5728", "EBS64": "ami-3c5f5748", "I32": "ami-965e56e2", "I64": "ami-325f5746" },
+			"ap-southeast-1" : { "EBS32": "ami-8e7538dc", "EBS64": "ami-ba7538e8", "I32": "ami-b07538e2", "I64": "ami-be7538ec" },
+			"ap-southeast-2" : { "EBS32": "ami-2f7dfa2e", "EBS64": "ami-5d7dfa5c", "I32": "ami-437dfa42", "I64": "ami-737dfa72" },
+			"ap-northeast-1" : { "EBS32": "ami-bcdf4e86", "EBS64": "ami-b6df4e8c", "I32": "ami-aadf4e90", "I64": "ami-a0df4e9a" },
+			"sa-east-1"      : { "EBS32": "ami-93c8138e", "EBS64": "ami-89c81394", "I32": "ami-8fc81392", "I64": "ami-8bc81396" }
+		}
+	},
+	
+	"Resources" : {
+	
+		"CfnUser" : {
+			"Type" : "AWS::IAM::User",
+			"Properties" : {
+				"Path": "/",
+				"Policies": [{
+					"PolicyName": "root",
+					"PolicyDocument": { "Statement":[{
+							"Effect":"Allow",
+							"Action":"cloudformation:DescribeStackResource",
+							"Resource":"*"
+					}]}
+				}]
+			}
+		},
+  		
+		"FTPServer": {  
+			"Type": "AWS::EC2::Instance",
+			"Metadata" : {
+			    "AWS::CloudFormation::Init" : {
+      				"configSets" : { "default" : [ "ftp" ]  },
+          			"ftp" : {
+               				"packages" : {
+               					"yum" : {
+               						"vsftpd" : [],
+               						"db4-utils" : []
+               					}
+               				},
+	           				"files" : {
+	           					"/etc/vsftpd/vsftpd.conf" : {
+		           					"content": { "Fn::Join" : ["\n", [
+										"anonymous_enable=NO",
+										"local_enable=YES",
+										"guest_enable=YES",
+										"write_enable=YES",
+										"local_umask=022",
+										"dirmessage_enable=YES",
+										"xferlog_enable=YES",
+										"log_ftp_protocol=YES",
+										"connect_from_port_20=YES",
+										"xferlog_file=/var/log/vsftpd.log",
+										"xferlog_std_format=NO",
+										"vsftpd_log_file=/var/log/vsftpd.log",
+										"chroot_local_user=YES",
+										"listen=YES",
+										"pam_service_name=vsftpd-virtual",
+										"userlist_enable=YES",
+										"tcp_wrappers=YES",
+										"virtual_use_local_privs=YES",
+										"user_sub_token=$USER",
+										"local_root=/var/www/virtual/$USER",
+										"hide_ids=YES",
+										"pasv_min_port=62222",
+										"pasv_max_port=63333",
+										"secure_chroot_dir=/usr/share/empty",
+										""
+									]]},
+	                   				"mode": "000644",
+	                   				"owner": "root",
+	                   				"group": "root"
+	           					},
+	           					"/etc/pam.d/vsftpd-virtual" : {
+	           						"content": { "Fn::Join": ["\n",[
+										"auth required pam_userdb.so db=/etc/vsftpd/virtual-users",
+										"account required pam_userdb.so db=/etc/vsftpd/virtual-users",
+										"session required pam_loginuid.so"
+	           						]]},
+	           						"mode": "000644",
+	                   				"owner": "root",
+	                   				"group": "root"
+	           					},
+	           					"/tmp/virtual-users.txt" : {
+	           						"content": { "Fn::Join": ["\n",[
+										{"Ref" : "FTPUsername" },
+										{"Ref" : "FTPPassword" },
+										""
+	           						]]},
+	           						"mode": "000644",
+	                   				"owner": "root",
+	                   				"group": "root"
+	           					}
+	           				}
+          			}
+			   }
+			},
+			"Properties": {
+				"ImageId" : { "Fn::FindInMap" : [ "AWSRegionArch2AMI", { "Ref" : "AWS::Region" },
+							{ "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" }, "Arch" ] } ] },
+				"InstanceType"   : { "Ref" : "InstanceType" },
+				"SecurityGroups" : [ {"Ref" : "FTPSecurityGroup"} ],
+				"KeyName"        : { "Ref" : "KeyName" },
+				"UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+					"#!/bin/bash -v\n",
+					"yum update -y aws-cfn-bootstrap\n",
+					
+					"# Helper function\n",
+					"function error_exit\n",
+					"{\n",
+					"  /opt/aws/bin/cfn-signal -e 1 -r \"$1\" '", { "Ref" : "WaitHandle" }, "'\n",
+					"  exit 1\n",
+					"}\n",
+					
+					"# Install packages\n",
+					"/opt/aws/bin/cfn-init -s ", { "Ref" : "AWS::StackId" }, " -r FTPServer ",
+					"    --region ", { "Ref" : "AWS::Region" }, " || error_exit 'Failed to run cfn-init'\n",
+					
+					"# Set the passive connection IP address\n",
+					"PublicIp=`curl -s http://169.254.169.254/latest/meta-data/public-ipv4`\n",
+					"echo \"pasv_address=$PublicIp\" >> /etc/vsftpd/vsftpd.conf\n",
+					
+					"db_load -T -t hash -f /tmp/virtual-users.txt /etc/vsftpd/virtual-users.db\n",
+					"rm /tmp/virtual-users.txt\n",
+					
+					"# Use ephemeral if any\n",
+					"if [ -d \"/media/ephemeral0\" ]; then\n",
+					"   ln -s /media/ephemeral0 /var/www\n",
+					"fi\n",
+					
+					"# Make directory structure for FTP\n",
+					"FTP_ROOT=\"/var/www/virtual\"\n",
+					"HOME_DIR=\"$FTP_ROOT/", {"Ref" : "FTPUsername" }, "\"\n",
+					"mkdir -p $HOME_DIR\n",
+					"chown -R ftp:ftp $FTP_ROOT\n",
+					
+     				"# Start FTP\n",
+     				"service vsftpd start\n",
+					
+					"# All is well so signal success\n",
+					"/opt/aws/bin/cfn-signal -e 0 -r \"Application Stack setup complete\" '", { "Ref" : "WaitHandle" }, "'\n"
+				]]}}        
+			}
+		},
+		"WaitHandle" : {
+			"Type" : "AWS::CloudFormation::WaitConditionHandle"
+		},
+		"WaitCondition" : {
+			"Type" : "AWS::CloudFormation::WaitCondition",
+			"DependsOn" : "FTPServer",
+			"Properties" : {
+				"Handle" : {"Ref" : "WaitHandle"},
+				"Timeout" : "300"
+			}
+		},
+	
+		"FTPSecurityGroup" : {
+			"Type" : "AWS::EC2::SecurityGroup",
+			"Properties" : {
+			"GroupDescription" : "Enable FTP access",
+				"SecurityGroupIngress" : [
+      				{"IpProtocol" : "tcp", "FromPort" : "21", "ToPort" : "21", "CidrIp" : "0.0.0.0/0"},
+      				{"IpProtocol" : "tcp", "FromPort" : "62222", "ToPort" : "63333", "CidrIp" : "0.0.0.0/0"},
+      				{"IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : "0.0.0.0/0"}
+				]
+			}
+		}        
+	},
+	
+	"Outputs" : {
+		"FTP" : {
+			"Value" : { "Fn::GetAtt" : [ "FTPServer", "PublicDnsName" ]},
+			"Description" : "URL for newly created FTP"
+		}
+	}
+}
